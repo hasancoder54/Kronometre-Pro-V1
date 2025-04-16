@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Kronometre</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      background-color: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+      color: white;
+      font-family: Arial, sans-serif;
+      user-select: none;
+    }
+
+    .özel {
+      text-align: center;
+      color: #FFA500;
+      font-size: 36px;
+      margin: 10px 0;
+    }
+
+    .real-time {
+      font-size: 24px;
+      margin-bottom: 10px;
+      text-align: center;
+      color: #00f6ff;
+      text-shadow: 0 0 10px #00f6ff, 0 0 20px #00f6ff;
+    }
+
+    .circle-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin-bottom: 30px;
+    }
+
+    .glow {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,165,0,0.6) 0%, transparent 70%);
+      z-index: 1;
+    }
+
+    .rotating-circle {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      border: 4px solid orange;
+      animation: rotate 60s linear infinite;
+      z-index: 2;
+      box-shadow: 0 0 10px orange;
+    }
+
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .center-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 3;
+      font-size: 20px;
+      text-align: center;
+    }
+
+    button {
+      font-size: 16px;
+      padding: 12px 20px;
+      margin: 10px;
+      background: linear-gradient(45deg, #FFA500, #ff7f00);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 5px 15px rgba(255, 165, 0, 0.5);
+    }
+
+    button:hover {
+      background: linear-gradient(45deg, #ff7f00, #FFA500);
+      box-shadow: 0 8px 20px rgba(255, 165, 0, 0.7);
+      transform: scale(1.1);
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    .admin-panel {
+      background-color: #222;
+      padding: 20px;
+      margin-top: 20px;
+      border-radius: 8px;
+      color: white;
+      display: none;
+    }
+
+    .admin-panel input {
+      padding: 10px;
+      font-size: 16px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    .admin-panel button {
+      background: #ff4747;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="özel">Kronometre</h1>
+  <div class="real-time" id="real-time">⏰ 00:00:00</div>
+
+  <div class="circle-container">
+    <div class="glow"></div>
+    <div class="rotating-circle"></div>
+    <div class="center-text" id="display">00:00:00.000</div>
+  </div>
+
+  <div>
+    <button onclick="start()">Başlat</button>
+    <button onclick="stop()">Duraklat</button>
+    <button onclick="reset()">Sıfırla</button>
+    <button onclick="recordLap()">Tur Kaydet</button>
+    <button onclick="showAdminPanel()">TA</button>
+  </div>
+
+  <div id="tur-list" style="margin-top:10px;"></div>
+
+  <div class="admin-panel" id="admin-panel">
+    <h3>Admin Paneli</h3>
+    <input type="text" id="admin-password" placeholder="Şifre Girin (Gözükecek)" />
+    <button onclick="checkPassword()">Şifreyi Doğrula</button>
+    <div id="admin-actions" style="display:none;">
+      <h4>Gerçek Saat ve Kronometre Ayarları</h4>
+      <label for="real-time-set">Gerçek Saat:</label>
+      <input type="time" id="real-time-set" />
+      <label for="chrono-time-set">Kronometre:</label>
+      <input type="text" id="chrono-time-set" placeholder="00:00:00.000" />
+      <button onclick="applyTimeSettings()">Uygula</button>
+      <button onclick="closeAdminPanel()">Kapat</button>
+    </div>
+  </div>
+
+  <script>
+    let timer;
+    let seconds = 0;
+    let milliseconds = 0;
+    let running = false;
+    let lapTimes = [];
+    let customRealTime = null;
+
+    function updateDisplay() {
+      const hrs = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+      const secs = String(seconds % 60).padStart(2, '0');
+      const ms = String(milliseconds).padStart(3, '0');
+      document.getElementById('display').innerText = `${hrs}:${mins}:${secs}.${ms}`;
+    }
+
+    function updateRealTime() {
+      const now = new Date();
+      if (customRealTime) {
+        const customHours = String(customRealTime.getHours()).padStart(2, '0');
+        const customMinutes = String(customRealTime.getMinutes()).padStart(2, '0');
+        const customSeconds = String(customRealTime.getSeconds()).padStart(2, '0');
+        document.getElementById('real-time').innerText = `⏰ ${customHours}:${customMinutes}:${customSeconds}`;
+      } else {
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        document.getElementById('real-time').innerText = `⏰ ${hours}:${minutes}:${seconds}`;
+      }
+    }
+
+    setInterval(() => {
+      updateRealTime();
+      if (running) {
+        milliseconds++;
+        if (milliseconds >= 100) {
+          milliseconds = 0;
+          seconds++;
+        }
+        updateDisplay();
+      }
+    }, 10);
+
+    function start() {
+      running = true;
+    }
+
+    function stop() {
+      running = false;
+    }
+
+    function reset() {
+      stop();
+      seconds = 0;
+      milliseconds = 0;
+      updateDisplay();
+      lapTimes = [];
+      document.getElementById('tur-list').innerHTML = '';
+    }
+
+    function recordLap() {
+      const lapTime = formatTime(seconds, milliseconds);
+      lapTimes.push(lapTime);
+      updateLapList();
+    }
+
+    function updateLapList() {
+      const lapListElement = document.getElementById('tur-list');
+      lapListElement.innerHTML = '';
+      lapTimes.forEach((lap, index) => {
+        const lapElement = document.createElement('div');
+        lapElement.classList.add('tur-item');
+        lapElement.innerText = `Tur ${index + 1}: ${lap}`;
+        lapListElement.appendChild(lapElement);
+      });
+    }
+
+    function formatTime(seconds, milliseconds) {
+      const hrs = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+      const secs = String(seconds % 60).padStart(2, '0');
+      const ms = String(milliseconds).padStart(3, '0');
+      return `${hrs}:${mins}:${secs}.${ms}`;
+    }
+
+    function showAdminPanel() {
+      document.getElementById("admin-panel").style.display = "block";
+    }
+
+    function checkPassword() {
+      const pass = document.getElementById("admin-password").value;
+      if (pass === "General123") {
+        document.getElementById("admin-actions").style.display = "block";
+      } else {
+        alert("Şifre yanlış!");
+      }
+    }
+
+    function applyTimeSettings() {
+      const realTimeValue = document.getElementById("real-time-set").value;
+      const chronoValue = document.getElementById("chrono-time-set").value;
+
+      if (realTimeValue) {
+        const [h, m] = realTimeValue.split(":");
+        customRealTime = new Date();
+        customRealTime.setHours(parseInt(h));
+        customRealTime.setMinutes(parseInt(m));
+        customRealTime.setSeconds(0);
+      }
+
+      if (chronoValue) {
+        const [timePart, msPart = "000"] = chronoValue.split(".");
+        const [h, m, s] = timePart.split(":").map(n => parseInt(n));
+        seconds = h * 3600 + m * 60 + s;
+        milliseconds = parseInt(msPart);
+        updateDisplay();
+      }
+    }
+
+    function closeAdminPanel() {
+      document.getElementById("admin-panel").style.display = "none";
+    }
+  </script>
+</body>
+</html>
